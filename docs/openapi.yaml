@@ -1,0 +1,135 @@
+openapi: 3.0.3
+info:
+  title: Days Until API
+  description: |
+    A lightweight API to calculate the number of days from today to a target date.
+    
+    ## Usage
+    
+    Simply call the endpoint with a date in yyyy-mm-dd format:
+    - `/v1/days-until/2026-12-31` returns `{"days": 192}`
+    - `/v1/days-until/2026-12-31?title=Christmas` returns `{"Christmas": 192}`
+    
+    The API calculates the difference from today (UTC midnight) to the target date (UTC midnight).
+    
+  version: 1.0.0
+  contact:
+    name: API Support
+  license:
+    name: MIT
+
+servers:
+  - url: https://days-until.cjl.nz
+    description: Production server
+  - url: http://localhost:3000
+    description: Local development
+
+tags:
+  - name: calculations
+    description: Date calculation endpoints
+
+paths:
+  /v1/days-until/{date}:
+    get:
+      tags:
+        - calculations
+      summary: Calculate days until a target date
+      description: |
+        Returns the number of days from today to the specified target date.
+        
+        - Positive numbers indicate future dates
+        - Negative numbers indicate past dates
+        - Zero means the date is today
+      operationId: getDaysUntil
+      parameters:
+        - name: date
+          in: path
+          required: true
+          description: Target date in yyyy-mm-dd format
+          schema:
+            type: string
+            format: date
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+            example: '2026-12-31'
+        - name: title
+          in: query
+          required: false
+          description: Optional custom label for the response field (instead of 'days')
+          schema:
+            type: string
+            example: 'Christmas'
+      responses:
+        '200':
+          description: Successful calculation
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/DaysResponse'
+                  - $ref: '#/components/schemas/CustomTitleResponse'
+              examples:
+                default:
+                  summary: Default response
+                  value:
+                    days: 192
+                custom_title:
+                  summary: Custom title response
+                  value:
+                    Christmas: 192
+                past_date:
+                  summary: Past date (negative)
+                  value:
+                    days: -100
+        '400':
+          description: Invalid date format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalid_format:
+                  summary: Invalid date format
+                  value:
+                    error: 'Invalid date format. Use yyyy-mm-dd'
+                invalid_path:
+                  summary: Invalid path
+                  value:
+                    error: 'Invalid path format. Expected: /v1/days-until/yyyy-mm-dd'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: 'Internal server error'
+
+components:
+  schemas:
+    DaysResponse:
+      type: object
+      properties:
+        days:
+          type: integer
+          description: Number of days until the target date (negative if in the past)
+          example: 192
+      required:
+        - days
+
+    CustomTitleResponse:
+      type: object
+      description: Response when a custom title parameter is provided
+      additionalProperties:
+        type: integer
+      example:
+        Christmas: 192
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+          example: 'Invalid date format. Use yyyy-mm-dd'
+      required:
+        - error

@@ -1,0 +1,120 @@
+name: Deploy to AWS
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  STACK_NAME: days-until-api
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      id-token: write  # Required for OIDC authentication
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          # Alternative: use access keys (less secure)
+          # aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          # aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Package Lambda function
+        run: |
+          cd src
+          zip -r ../lambda.zip .
+          cd ..
+
+      - name: Upload Lambda code to S3
+        id: upload
+        run: |
+          BUCKET_NAME="${{ secrets.DEPLOYMENT_BUCKET }}"
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          S3_KEY="lambda-deployments/days-until-api-${TIMESTAMP}.zip"
+          
+          aws s3 cp lambda.zip "s3://${BUCKET_NAME}/${S3_KEY}"
+          
+          echo "s3_bucket=${BUCKET_NAME}" >> $GITHUB_OUTPUT
+          echo "s3_key=${S3_KEY}" >> $GITHUB_OUTPUT
+
+      - name: Deploy CloudFormation stack
+        run: |
+          aws cloudformation deploy \
+            --template-file infrastructure/template.yaml \
+            --stack-name ${{ env.STACK_NAME }} \
+            --parameter-overrides \
+              DomainName=${{ secrets.DOMAIN_NAME }} \
+              CertificateArn=${{ secrets.CERTIFICATE_ARN }} \
+              HostedZoneId=${{ secrets.HOSTED_ZONE_ID }} \
+            --capabilities CAPABILITY_IAM \
+            --no-fail-on-empty-changeset
+
+      - name: Update Lambda function code
+        run: |
+          FUNCTION_NAME=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.STACK_NAME }} \
+            --query "Stacks[0].Outputs[?OutputKey=='LambdaFunctionName'].OutputValue" \
+            --output text)
+          
+          aws lambda update-function-code \
+            --function-name ${FUNCTION_NAME} \
+            --s3-bucket ${{ steps.upload.outputs.s3_bucket }} \
+            --s3-key ${{ steps.upload.outputs.s3_key }}
+
+      - name: Get API URL
+        id: get_url
+        run: |
+          API_URL=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.STACK_NAME }} \
+            --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" \
+            --output text)
+          
+          echo "api_url=${API_URL}" >> $GITHUB_OUTPUT
+          echo "🚀 API deployed to: ${API_URL}"
+
+      - name: Test API endpoint
+        run: |
+          sleep 5  # Wait for deployment to propagate
+          
+          # Test with a future date
+          RESPONSE=$(curl -s "${{ steps.get_url.outputs.api_url }}/v1/days-until/2027-01-01")
+          echo "Test response: ${RESPONSE}"
+          
+          # Verify response contains "days" field
+          if echo "${RESPONSE}" | grep -q '"days"'; then
+            echo "✅ API test passed"
+          else
+            echo "❌ API test failed"
+            exit 1
+          fi
+
+      - name: Deployment summary
+        run: |
+          echo "## Deployment Summary 🎉" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **API URL**: ${{ steps.get_url.outputs.api_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Custom Domain**: https://${{ secrets.DOMAIN_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Stack Name**: ${{ env.STACK_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Region**: ${{ env.AWS_REGION }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Example Usage" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "curl ${{ steps.get_url.outputs.api_url }}/v1/days-until/2027-01-01" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY

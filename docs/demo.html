@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Days Until API - Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 500px;
+            width: 100%;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2em;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 0.9em;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            color: #333;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+        
+        input[type="date"],
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        input[type="date"]:focus,
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        .result {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+            display: none;
+        }
+        
+        .result.show {
+            display: block;
+            animation: slideIn 0.3s ease;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .result h2 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 1.2em;
+        }
+        
+        .days-count {
+            font-size: 3em;
+            font-weight: bold;
+            color: #667eea;
+            margin: 10px 0;
+        }
+        
+        .error {
+            color: #e53e3e;
+            background: #fff5f5;
+            border-left-color: #e53e3e;
+        }
+        
+        .code-block {
+            margin-top: 15px;
+            padding: 12px;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            overflow-x: auto;
+        }
+        
+        .hint {
+            font-size: 0.85em;
+            color: #666;
+            margin-top: 5px;
+        }
+        
+        .api-info {
+            margin-top: 30px;
+            padding-top: 30px;
+            border-top: 1px solid #e0e0e0;
+        }
+        
+        .api-info h3 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 1em;
+        }
+        
+        .api-info a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        
+        .api-info a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📅 Days Until</h1>
+        <p class="subtitle">Calculate days from today to any date</p>
+        
+        <form id="daysForm">
+            <div class="form-group">
+                <label for="targetDate">Target Date</label>
+                <input type="date" id="targetDate" required>
+                <p class="hint">Select any date to calculate days until</p>
+            </div>
+            
+            <div class="form-group">
+                <label for="customTitle">Custom Label (Optional)</label>
+                <input type="text" id="customTitle" placeholder="e.g., Birthday, Vacation">
+                <p class="hint">Customize the response field name</p>
+            </div>
+            
+            <button type="submit">Calculate Days</button>
+        </form>
+        
+        <div id="result" class="result">
+            <h2>Result</h2>
+            <div id="resultContent"></div>
+            <div class="code-block" id="apiUrl"></div>
+        </div>
+        
+        <div class="api-info">
+            <h3>About This API</h3>
+            <p>This demo uses the <strong>Days Until API</strong></p>
+            <p style="margin-top: 10px;">
+                <a href="https://days-until.cjl.nz/docs" target="_blank">📚 View Documentation</a> •
+                <a href="https://github.com" target="_blank">💻 GitHub</a>
+            </p>
+        </div>
+    </div>
+    
+    <script>
+        const API_BASE_URL = 'https://days-until.cjl.nz';
+        
+        document.getElementById('daysForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const targetDate = document.getElementById('targetDate').value;
+            const customTitle = document.getElementById('customTitle').value.trim();
+            
+            // Build API URL
+            let apiUrl = `${API_BASE_URL}/v1/days-until/${targetDate}`;
+            if (customTitle) {
+                apiUrl += `?title=${encodeURIComponent(customTitle)}`;
+            }
+            
+            const resultDiv = document.getElementById('result');
+            const resultContent = document.getElementById('resultContent');
+            const apiUrlDiv = document.getElementById('apiUrl');
+            
+            try {
+                // Show loading state
+                resultDiv.className = 'result show';
+                resultContent.innerHTML = '<p>Calculating...</p>';
+                apiUrlDiv.textContent = `GET ${apiUrl}`;
+                
+                // Fetch from API
+                const response = await fetch(apiUrl);
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'API request failed');
+                }
+                
+                // Display result
+                const key = Object.keys(data)[0];
+                const days = data[key];
+                
+                let daysText = '';
+                if (days > 0) {
+                    daysText = `${days} day${days !== 1 ? 's' : ''} from now`;
+                } else if (days < 0) {
+                    daysText = `${Math.abs(days)} day${days !== -1 ? 's' : ''} ago`;
+                } else {
+                    daysText = 'Today!';
+                }
+                
+                resultContent.innerHTML = `
+                    <div class="days-count">${days}</div>
+                    <p>${customTitle || 'Days'}: ${daysText}</p>
+                    <div style="margin-top: 15px; padding: 10px; background: white; border-radius: 6px;">
+                        <strong>Response:</strong>
+                        <pre style="margin-top: 5px;">${JSON.stringify(data, null, 2)}</pre>
+                    </div>
+                `;
+                
+            } catch (error) {
+                resultDiv.className = 'result show error';
+                resultContent.innerHTML = `
+                    <h2>Error</h2>
+                    <p>${error.message}</p>
+                `;
+            }
+        });
+        
+        // Set default date to 30 days from now
+        const defaultDate = new Date();
+        defaultDate.setDate(defaultDate.getDate() + 30);
+        document.getElementById('targetDate').value = defaultDate.toISOString().split('T')[0];
+    </script>
+</body>
+</html>

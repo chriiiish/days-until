@@ -1,0 +1,252 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Days Until API - Lightweight API Gateway with Lambda'
+
+Parameters:
+  DomainName:
+    Type: String
+    Default: 'days-until.cjl.nz'
+    Description: 'Custom domain name for the API'
+  
+  HostedZoneId:
+    Type: String
+    Description: 'Route53 Hosted Zone ID (optional - leave empty if managing DNS manually)'
+    Default: ''
+
+  CertificateArn:
+    Type: String
+    Description: 'ACM Certificate ARN for the custom domain (must be in us-east-1 for API Gateway)'
+    Default: ''
+
+Conditions:
+  CreateDNSRecord: !Not [!Equals [!Ref HostedZoneId, '']]
+  HasCertificate: !Not [!Equals [!Ref CertificateArn, '']]
+
+Resources:
+  # Lambda Execution Role
+  LambdaExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+      Tags:
+        - Key: Project
+          Value: days-until-api
+
+  # Lambda Function
+  DaysUntilFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: days-until-api
+      Runtime: nodejs22.x
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          export const handler = async (event) => {
+            return {
+              statusCode: 200,
+              headers: {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+              },
+              body: JSON.stringify({ message: 'Placeholder - deploy actual code' })
+            };
+          };
+      Timeout: 10
+      MemorySize: 128
+      Environment:
+        Variables:
+          NODE_ENV: production
+      Tags:
+        - Key: Project
+          Value: days-until-api
+
+  # Lambda Log Group
+  LambdaLogGroup:
+    Type: 'AWS::Logs::LogGroup'
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${DaysUntilFunction}'
+      RetentionInDays: 7
+
+  # API Gateway REST API
+  DaysUntilApi:
+    Type: 'AWS::ApiGateway::RestApi'
+    Properties:
+      Name: days-until-api
+      Description: 'API to calculate days until a target date'
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+      Tags:
+        - Key: Project
+          Value: days-until-api
+
+  # API Gateway Resource: /v1
+  V1Resource:
+    Type: 'AWS::ApiGateway::Resource'
+    Properties:
+      RestApiId: !Ref DaysUntilApi
+      ParentId: !GetAtt DaysUntilApi.RootResourceId
+      PathPart: v1
+
+  # API Gateway Resource: /v1/days-until
+  DaysUntilResource:
+    Type: 'AWS::ApiGateway::Resource'
+    Properties:
+      RestApiId: !Ref DaysUntilApi
+      ParentId: !Ref V1Resource
+      PathPart: days-until
+
+  # API Gateway Resource: /v1/days-until/{date}
+  DateResource:
+    Type: 'AWS::ApiGateway::Resource'
+    Properties:
+      RestApiId: !Ref DaysUntilApi
+      ParentId: !Ref DaysUntilResource
+      PathPart: '{date}'
+
+  # GET Method for /v1/days-until/{date}
+  GetMethod:
+    Type: 'AWS::ApiGateway::Method'
+    Properties:
+      RestApiId: !Ref DaysUntilApi
+      ResourceId: !Ref DateResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DaysUntilFunction.Arn}/invocations'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: true
+
+  # OPTIONS Method for CORS
+  OptionsMethod:
+    Type: 'AWS::ApiGateway::Method'
+    Properties:
+      RestApiId: !Ref DaysUntilApi
+      ResourceId: !Ref DateResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: ''
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  # API Gateway Deployment
+  ApiDeployment:
+    Type: 'AWS::ApiGateway::Deployment'
+    DependsOn:
+      - GetMethod
+      - OptionsMethod
+    Properties:
+      RestApiId: !Ref DaysUntilApi
+
+  # API Gateway Stage
+  ApiStage:
+    Type: 'AWS::ApiGateway::Stage'
+    Properties:
+      RestApiId: !Ref DaysUntilApi
+      DeploymentId: !Ref ApiDeployment
+      StageName: prod
+      Description: 'Production stage'
+      Tags:
+        - Key: Project
+          Value: days-until-api
+
+  # Lambda Permission for API Gateway
+  LambdaApiPermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      FunctionName: !Ref DaysUntilFunction
+      Action: 'lambda:InvokeFunction'
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${DaysUntilApi}/*/*/*'
+
+  # Custom Domain Name (optional)
+  ApiCustomDomain:
+    Type: 'AWS::ApiGateway::DomainName'
+    Condition: HasCertificate
+    Properties:
+      DomainName: !Ref DomainName
+      RegionalCertificateArn: !Ref CertificateArn
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+      Tags:
+        - Key: Project
+          Value: days-until-api
+
+  # Base Path Mapping
+  ApiBasePathMapping:
+    Type: 'AWS::ApiGateway::BasePathMapping'
+    Condition: HasCertificate
+    DependsOn: ApiStage
+    Properties:
+      DomainName: !Ref ApiCustomDomain
+      RestApiId: !Ref DaysUntilApi
+      Stage: !Ref ApiStage
+
+  # Route53 Record (optional)
+  ApiDNSRecord:
+    Type: 'AWS::Route53::RecordSet'
+    Condition: CreateDNSRecord
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref DomainName
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt ApiCustomDomain.RegionalDomainName
+        HostedZoneId: !GetAtt ApiCustomDomain.RegionalHostedZoneId
+
+Outputs:
+  ApiUrl:
+    Description: 'API Gateway endpoint URL'
+    Value: !Sub 'https://${DaysUntilApi}.execute-api.${AWS::Region}.amazonaws.com/prod'
+    Export:
+      Name: !Sub '${AWS::StackName}-ApiUrl'
+
+  CustomDomainUrl:
+    Description: 'Custom domain URL (if configured)'
+    Value: !Sub 'https://${DomainName}'
+    Condition: HasCertificate
+
+  LambdaFunctionName:
+    Description: 'Lambda function name'
+    Value: !Ref DaysUntilFunction
+    Export:
+      Name: !Sub '${AWS::StackName}-LambdaFunction'
+
+  LambdaFunctionArn:
+    Description: 'Lambda function ARN'
+    Value: !GetAtt DaysUntilFunction.Arn
+
+  ApiId:
+    Description: 'API Gateway ID'
+    Value: !Ref DaysUntilApi
+    Export:
+      Name: !Sub '${AWS::StackName}-ApiId'

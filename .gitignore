@@ -48,6 +48,10 @@ web_modules/
 *.tsbuildinfo
 
 # Optional npm cache directory
+
+# Lambda deployment package
+lambda.zip
+*.zip
 .npm
 
 # Optional eslint cache
