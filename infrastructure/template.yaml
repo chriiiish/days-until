@@ -37,7 +37,7 @@ Resources:
         - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
       Tags:
         - Key: Project
-          Value: days-until-api
+          Value: DaysUntil
 
   # Lambda Function
   DaysUntilFunction:
@@ -66,7 +66,7 @@ Resources:
           NODE_ENV: production
       Tags:
         - Key: Project
-          Value: days-until-api
+          Value: DaysUntil
 
   # Lambda Log Group
   LambdaLogGroup:
@@ -74,6 +74,9 @@ Resources:
     Properties:
       LogGroupName: !Sub '/aws/lambda/${DaysUntilFunction}'
       RetentionInDays: 7
+      Tags:
+        - Key: Project
+          Value: DaysUntil
 
   # API Gateway REST API
   DaysUntilApi:
@@ -86,7 +89,7 @@ Resources:
           - REGIONAL
       Tags:
         - Key: Project
-          Value: days-until-api
+          Value: DaysUntil
 
   # API Gateway Resource: /v1
   V1Resource:
@@ -176,7 +179,7 @@ Resources:
       Description: 'Production stage'
       Tags:
         - Key: Project
-          Value: days-until-api
+          Value: DaysUntil
 
   # Lambda Permission for API Gateway
   LambdaApiPermission:
@@ -199,7 +202,7 @@ Resources:
           - REGIONAL
       Tags:
         - Key: Project
-          Value: days-until-api
+          Value: DaysUntil
 
   # Base Path Mapping
   ApiBasePathMapping:
