@@ -13,6 +13,7 @@ A lightweight, serverless API that calculates the number of days from today to a
 - 🌍 **Public API**: No authentication required
 - 📖 **OpenAPI/Swagger**: Interactive documentation included
 - 🔒 **CORS-enabled**: Use from any web application
+- 🎨 **Shields.io Compatible**: Response format works with [Shields.io Endpoint Badge](https://shields.io/badges/endpoint-badge)
 
 ## Quick Start
 
@@ -21,36 +22,47 @@ A lightweight, serverless API that calculates the number of days from today to a
 Calculate days until a future date:
 ```bash
 curl https://days-until.cjl.nz/v1/days-until/2027-01-01
-# Response: {"days": 557}
+# Response: {"schemaVersion": 1, "label": "Days Remaining", "message": "557 days", "color": "blue"}
 ```
 
 Calculate days with a custom label:
 ```bash
-curl https://days-until.cjl.nz/v1/days-until/2027-12-25?title=Christmas
-# Response: {"Christmas": 557}
+curl https://days-until.cjl.nz/v1/days-until/2027-12-25?label=Christmas
+# Response: {"schemaVersion": 1, "label": "Christmas", "message": "557 days", "color": "blue"}
 ```
 
 Calculate days since a past date:
 ```bash
 curl https://days-until.cjl.nz/v1/days-until/2020-01-01
-# Response: {"days": -2364}
+# Response: {"schemaVersion": 1, "label": "Days Remaining", "message": "-2364 days", "color": "blue"}
+```
+
+### Use with Shields.io
+
+The response format is compatible with [Shields.io Endpoint Badge](https://shields.io/badges/endpoint-badge). Create dynamic badges in your README:
+
+```markdown
+![Days Until 2027](https://img.shields.io/endpoint?url=https://days-until.cjl.nz/v1/days-until/2027-01-01)
+![Christmas Countdown](https://img.shields.io/endpoint?url=https://days-until.cjl.nz/v1/days-until/2027-12-25?label=Christmas&color=red)
 ```
 
 ### JavaScript Example
 
 ```javascript
-async function getDaysUntil(date, title = null) {
-  const url = title 
-    ? `https://days-until.cjl.nz/v1/days-until/${date}?title=${title}`
-    : `https://days-until.cjl.nz/v1/days-until/${date}`;
+async function getDaysUntil(date, label = null, color = 'blue') {
+  const params = new URLSearchParams();
+  if (label) params.append('label', label);
+  if (color) params.append('color', color);
   
+  const url = `https://days-until.cjl.nz/v1/days-until/${date}${params.toString() ? '?' + params.toString() : ''}`;
   const response = await fetch(url);
   return response.json();
 }
 
 // Usage
-const result = await getDaysUntil('2027-12-31', 'New Year');
-console.log(result); // { "New Year": 557 }
+const result = await getDaysUntil('2027-12-31', 'New Year', 'green');
+console.log(result);
+// { "schemaVersion": 1, "label": "New Year", "message": "557 days", "color": "green" }
 ```
 
 ## API Reference
@@ -71,21 +83,28 @@ GET /v1/days-until/{date}
 
 | Parameter | Type   | Required | Description                                          |
 |-----------|--------|----------|------------------------------------------------------|
-| title     | string | No       | Custom label for the response (replaces "days")      |
+| label     | string | No       | Custom label for the badge (default: "Days Remaining") |
+| color     | string | No       | Badge color (default: "blue"). Also accepts "colour" spelling |
 
 ### Response
 
-**Default response:**
+**Default response (Shields.io badge format):**
 ```json
 {
-  "days": 192
+  "schemaVersion": 1,
+  "label": "Days Remaining",
+  "message": "192 days",
+  "color": "blue"
 }
 ```
 
-**Custom title response:**
+**Custom label and color:**
 ```json
 {
-  "Christmas": 192
+  "schemaVersion": 1,
+  "label": "Christmas",
+  "message": "192 days",
+  "color": "green"
 }
 ```
 

@@ -189,8 +189,8 @@ API_URL=$(aws cloudformation describe-stacks \
 # Test basic endpoint
 curl "${API_URL}/v1/days-until/2027-01-01"
 
-# Test with custom title
-curl "${API_URL}/v1/days-until/2027-12-25?title=Christmas"
+# Test with custom label and color
+curl "${API_URL}/v1/days-until/2027-12-25?label=Christmas&color=green"
 
 # Test with past date
 curl "${API_URL}/v1/days-until/2020-01-01"
@@ -199,15 +199,15 @@ curl "${API_URL}/v1/days-until/2020-01-01"
 ### Expected responses
 
 ```json
-{"days": 557}
+{"schemaVersion": 1, "label": "Days Remaining", "message": "557 days", "color": "blue"}
 ```
 
 ```json
-{"Christmas": 557}
+{"schemaVersion": 1, "label": "Christmas", "message": "557 days", "color": "green"}
 ```
 
 ```json
-{"days": -2364}
+{"schemaVersion": 1, "label": "Days Remaining", "message": "-2364 days", "color": "blue"}
 ```
 
 ## Monitoring

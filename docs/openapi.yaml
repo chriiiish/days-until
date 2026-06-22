@@ -3,14 +3,22 @@ info:
   title: Days Until API
   description: |
     A lightweight API to calculate the number of days from today to a target date.
+    Returns responses in [Shields.io Endpoint Badge](https://shields.io/badges/endpoint-badge) format.
     
     ## Usage
     
     Simply call the endpoint with a date in yyyy-mm-dd format:
-    - `/v1/days-until/2026-12-31` returns `{"days": 192}`
-    - `/v1/days-until/2026-12-31?title=Christmas` returns `{"Christmas": 192}`
+    - `/v1/days-until/2026-12-25` returns badge-style JSON
+    - `/v1/days-until/2026-12-25?label=Christmas&color=green` customizes the badge
     
     The API calculates the difference from today (UTC midnight) to the target date (UTC midnight).
+    
+    ## Shields.io Integration
+    
+    Use with Shields.io to create dynamic badges:
+    ```markdown
+    ![Badge](https://img.shields.io/endpoint?url=https://days-until.cjl.nz/v1/days-until/2027-12-25?label=Christmas&color=red)
+    ```
     
   version: 1.0.0
   contact:
@@ -35,7 +43,7 @@ paths:
         - calculations
       summary: Calculate days until a target date
       description: |
-        Returns the number of days from today to the specified target date.
+        Returns the number of days from today to the specified target date in Shields.io badge format.
         
         - Positive numbers indicate future dates
         - Negative numbers indicate past dates
@@ -51,35 +59,49 @@ paths:
             format: date
             pattern: '^\d{4}-\d{2}-\d{2}$'
             example: '2026-12-31'
-        - name: title
+        - name: label
           in: query
           required: false
-          description: Optional custom label for the response field (instead of 'days')
+          description: Custom label for the badge (default is "Days Remaining")
           schema:
             type: string
             example: 'Christmas'
+        - name: color
+          in: query
+          required: false
+          description: Badge color (default is "blue"). Also accepts "colour" spelling
+          schema:
+            type: string
+            example: 'green'
       responses:
         '200':
           description: Successful calculation
           content:
             application/json:
               schema:
-                oneOf:
-                  - $ref: '#/components/schemas/DaysResponse'
-                  - $ref: '#/components/schemas/CustomTitleResponse'
+                $ref: '#/components/schemas/BadgeResponse'
               examples:
                 default:
                   summary: Default response
                   value:
-                    days: 192
-                custom_title:
-                  summary: Custom title response
+                    schemaVersion: 1
+                    label: "Days Remaining"
+                    message: "192 days"
+                    color: "blue"
+                custom_label:
+                  summary: Custom label and color
                   value:
-                    Christmas: 192
+                    schemaVersion: 1
+                    label: "Christmas"
+                    message: "192 days"
+                    color: "green"
                 past_date:
                   summary: Past date (negative)
                   value:
-                    days: -100
+                    schemaVersion: 1
+                    label: "Days Remaining"
+                    message: "-100 days"
+                    color: "blue"
         '400':
           description: Invalid date format
           content:
@@ -106,23 +128,31 @@ paths:
 
 components:
   schemas:
-    DaysResponse:
+    BadgeResponse:
       type: object
+      description: Shields.io badge format response
       properties:
-        days:
+        schemaVersion:
           type: integer
-          description: Number of days until the target date (negative if in the past)
-          example: 192
+          description: Badge schema version (always 1)
+          example: 1
+        label:
+          type: string
+          description: Badge label text
+          example: "Days Remaining"
+        message:
+          type: string
+          description: Badge message showing the number of days
+          example: "192 days"
+        color:
+          type: string
+          description: Badge color
+          example: "blue"
       required:
-        - days
-
-    CustomTitleResponse:
-      type: object
-      description: Response when a custom title parameter is provided
-      additionalProperties:
-        type: integer
-      example:
-        Christmas: 192
+        - schemaVersion
+        - label
+        - message
+        - color
 
     ErrorResponse:
       type: object
