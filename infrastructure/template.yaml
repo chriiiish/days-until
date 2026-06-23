@@ -9,19 +9,27 @@ Parameters:
   
   HostedZoneId:
     Type: String
-    Description: 'Route53 Hosted Zone ID (optional - leave empty if managing DNS manually)'
-    Default: ''
-
-  CertificateArn:
-    Type: String
-    Description: 'ACM Certificate ARN for CloudFront (must be in us-east-1)'
+    Description: 'Route53 Hosted Zone ID (required for certificate validation and DNS record)'
     Default: ''
 
 Conditions:
   CreateDNSRecord: !Not [!Equals [!Ref HostedZoneId, '']]
-  HasCertificate: !Not [!Equals [!Ref CertificateArn, '']]
 
 Resources:
+  # ACM Certificate for CloudFront (must be in us-east-1)
+  Certificate:
+    Type: 'AWS::CertificateManager::Certificate'
+    Condition: CreateDNSRecord
+    Properties:
+      DomainName: !Ref DomainName
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Ref DomainName
+          HostedZoneId: !Ref HostedZoneId
+      Tags:
+        - Key: Project
+          Value: DaysUntil
+
   # Lambda@Edge Execution Role
   LambdaEdgeExecutionRole:
     Type: 'AWS::IAM::Role'
@@ -220,13 +228,13 @@ Resources:
         PriceClass: PriceClass_100  # Use only North America and Europe edges (cheapest)
         Aliases:
           !If
-            - HasCertificate
+            - CreateDNSRecord
             - [!Ref DomainName]
             - !Ref 'AWS::NoValue'
         ViewerCertificate:
           !If
-            - HasCertificate
-            - AcmCertificateArn: !Ref CertificateArn
+            - CreateDNSRecord
+            - AcmCertificateArn: !Ref Certificate
               SslSupportMethod: sni-only
               MinimumProtocolVersion: TLSv1.2_2021
             - CloudFrontDefaultCertificate: true
@@ -278,7 +286,12 @@ Outputs:
   CustomDomainUrl:
     Description: 'Custom domain URL (if configured)'
     Value: !Sub 'https://${DomainName}'
-    Condition: HasCertificate
+    Condition: CreateDNSRecord
+
+  CertificateArn:
+    Description: 'ACM Certificate ARN'
+    Value: !Ref Certificate
+    Condition: CreateDNSRecord
 
   LambdaFunctionName:
     Description: 'Lambda@Edge function name'
