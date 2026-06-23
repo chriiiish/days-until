@@ -1,7 +1,8 @@
 # Days Until API - Deployment Script for Windows
 # Usage: .\deploy.ps1
+# Note: Lambda@Edge requires deployment to us-east-1
 
-Write-Host "🚀 Days Until API - Deployment Script" -ForegroundColor Cyan
+Write-Host "🚀 Days Until API - Deployment Script (CloudFront + Lambda@Edge)" -ForegroundColor Cyan
 Write-Host ""
 
 # Check if AWS CLI is installed
@@ -26,41 +27,24 @@ try {
 
 # Configuration
 $stackName = "days-until-api"
-$region = "us-east-1"
-$functionName = "days-until-api"
+$region = "us-east-1"  # Lambda@Edge MUST be in us-east-1
 
 Write-Host ""
 Write-Host "Configuration:" -ForegroundColor Cyan
 Write-Host "  Stack Name: $stackName"
-Write-Host "  Region: $region"
-Write-Host "  Function Name: $functionName"
+Write-Host "  Region: $region (required for Lambda@Edge)"
 Write-Host ""
 
-# Step 1: Package Lambda function
-Write-Host "📦 Step 1: Packaging Lambda function..." -ForegroundColor Yellow
-Push-Location src
-if (Test-Path "../lambda.zip") {
-    Remove-Item "../lambda.zip" -Force
-}
-Compress-Archive -Path * -DestinationPath ../lambda.zip -Force
-Pop-Location
-
-if (Test-Path "lambda.zip") {
-    Write-Host "✅ Lambda package created successfully" -ForegroundColor Green
-} else {
-    Write-Host "❌ Error: Failed to create Lambda package" -ForegroundColor Red
-    exit 1
-}
-
-# Step 2: Deploy CloudFormation stack
+# Deploy CloudFormation stack
+Write-Host "☁️  Deploying CloudFormation stack (CloudFront + Lambda@Edge)..." -ForegroundColor Yellow
+Write-Host "   Note: Code is embedded in CloudFormation template" -ForegroundColor Gray
 Write-Host ""
-Write-Host "☁️  Step 2: Deploying CloudFormation stack..." -ForegroundColor Yellow
 
 # Check if user wants custom domain
 $useDomain = Read-Host "Do you want to configure a custom domain? (y/n)"
 if ($useDomain -eq "y") {
     $domainName = Read-Host "Enter domain name (e.g., days-until.cjl.nz)"
-    $certArn = Read-Host "Enter ACM Certificate ARN"
+    $certArn = Read-Host "Enter ACM Certificate ARN (must be in us-east-1 for CloudFront)"
     $hostedZoneId = Read-Host "Enter Route53 Hosted Zone ID (optional, press Enter to skip)"
     
     if ($hostedZoneId) {
@@ -92,69 +76,75 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "✅ CloudFormation stack deployed successfully" -ForegroundColor Green
+Write-Host "   ⏳ CloudFront distribution is being created (this can take 15-20 minutes)" -ForegroundColor Yellow
 
-# Step 3: Update Lambda function code
+# Get CloudFront URL
 Write-Host ""
-Write-Host "🔄 Step 3: Updating Lambda function code..." -ForegroundColor Yellow
+Write-Host "🌐 Getting CloudFront URL..." -ForegroundColor Yellow
 
-aws lambda update-function-code `
-    --function-name $functionName `
-    --zip-file fileb://lambda.zip `
-    --region $region | Out-Null
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "❌ Error: Lambda update failed" -ForegroundColor Red
-    exit 1
-}
-
-Write-Host "✅ Lambda function updated successfully" -ForegroundColor Green
-
-# Step 4: Get API URL
-Write-Host ""
-Write-Host "🌐 Step 4: Getting API URL..." -ForegroundColor Yellow
-
-$apiUrl = aws cloudformation describe-stacks `
+$cloudFrontUrl = aws cloudformation describe-stacks `
     --stack-name $stackName `
-    --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" `
+    --query "Stacks[0].Outputs[?OutputKey=='CloudFrontUrl'].OutputValue" `
     --output text `
     --region $region
 
-if ($apiUrl) {
+$customDomainUrl = aws cloudformation describe-stacks `
+    --stack-name $stackName `
+    --query "Stacks[0].Outputs[?OutputKey=='CustomDomainUrl'].OutputValue" `
+    --output text `
+    --region $region
+
+$distributionId = aws cloudformation describe-stacks `
+    --stack-name $stackName `
+    --query "Stacks[0].Outputs[?OutputKey=='CloudFrontDistributionId'].OutputValue" `
+    --output text `
+    --region $region
+
+if ($cloudFrontUrl) {
     Write-Host "✅ API deployed successfully!" -ForegroundColor Green
     Write-Host ""
     Write-Host "═══════════════════════════════════════════════" -ForegroundColor Cyan
-    Write-Host "  API URL: $apiUrl" -ForegroundColor White
+    if ($customDomainUrl -and $customDomainUrl -ne "") {
+        Write-Host "  Custom Domain: $customDomainUrl" -ForegroundColor White
+    }
+    Write-Host "  CloudFront URL: $cloudFrontUrl" -ForegroundColor White
+    Write-Host "  Distribution ID: $distributionId" -ForegroundColor Gray
     Write-Host "═══════════════════════════════════════════════" -ForegroundColor Cyan
     Write-Host ""
     
     # Test the API
     Write-Host "🧪 Testing API..." -ForegroundColor Yellow
     $testDate = (Get-Date).AddDays(30).ToString("yyyy-MM-dd")
-    $testUrl = "$apiUrl/v1/days-until/$testDate"
+    $testUrl = "$cloudFrontUrl/v1/days-until/$testDate"
+    
+    Write-Host "   Waiting for CloudFront distribution to be ready..." -ForegroundColor Yellow
+    Start-Sleep -Seconds 3
     
     try {
         $response = Invoke-RestMethod -Uri $testUrl -Method Get
         Write-Host "✅ API test successful!" -ForegroundColor Green
         Write-Host "   Response: $($response | ConvertTo-Json -Compress)" -ForegroundColor White
     } catch {
-        Write-Host "⚠️  Warning: API test failed, but deployment may still be successful" -ForegroundColor Yellow
-        Write-Host "   Wait a few seconds and try manually:" -ForegroundColor Yellow
+        Write-Host "⚠️  CloudFront is still deploying. Test manually in a few minutes:" -ForegroundColor Yellow
         Write-Host "   curl $testUrl" -ForegroundColor White
     }
     
     Write-Host ""
     Write-Host "📚 Next Steps:" -ForegroundColor Cyan
-    Write-Host "   1. Test: curl $apiUrl/v1/days-until/2027-01-01"
-    Write-Host "   2. View docs: $apiUrl/docs (requires separate hosting)"
-    Write-Host "   3. Monitor logs: aws logs tail /aws/lambda/$functionName --follow"
+    Write-Host "   1. Wait for CloudFront deployment to complete (check AWS Console)"
+    Write-Host "   2. Test: curl $cloudFrontUrl/v1/days-until/2027-01-01"
+    if ($customDomainUrl -and $customDomainUrl -ne "") {
+        Write-Host "   3. Use custom domain: $customDomainUrl/v1/days-until/2027-01-01"
+    }
+    Write-Host ""
+    Write-Host "💡 Cache Info:" -ForegroundColor Cyan
+    Write-Host "   - Responses cached for 6 hours at CloudFront edge locations"
+    Write-Host "   - Lambda@Edge only runs on cache misses (huge cost savings!)"
+    Write-Host "   - To invalidate cache: aws cloudfront create-invalidation --distribution-id $distributionId --paths '/*'"
     Write-Host ""
 } else {
-    Write-Host "❌ Error: Could not retrieve API URL" -ForegroundColor Red
+    Write-Host "❌ Error: Could not retrieve CloudFront URL" -ForegroundColor Red
     exit 1
 }
-
-# Cleanup
-Write-Host "🧹 Cleaning up..." -ForegroundColor Yellow
-Remove-Item lambda.zip -Force -ErrorAction SilentlyContinue
 
 Write-Host "✅ Deployment complete!" -ForegroundColor Green

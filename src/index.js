@@ -3,6 +3,10 @@
  * Calculates the number of days from today to a target date
  * Returns badge-style JSON format
  * Triggered on CloudFront origin-request (cache miss)
+ * 
+ * NOTE: This code is embedded in infrastructure/template.yaml
+ * This file is kept for reference and local testing only.
+ * Any changes must be manually copied to the CloudFormation template.
  */
 
 export const handler = async (event) => {
