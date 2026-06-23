@@ -115,7 +115,7 @@ if ($cloudFrontUrl) {
     # Test the API
     Write-Host "🧪 Testing API..." -ForegroundColor Yellow
     $testDate = (Get-Date).AddDays(30).ToString("yyyy-MM-dd")
-    $testUrl = "$cloudFrontUrl/v1/days-until/$testDate"
+    $testUrl = "$cloudFrontUrl/v1/$testDate"
     
     Write-Host "   Waiting for CloudFront distribution to be ready..." -ForegroundColor Yellow
     Start-Sleep -Seconds 3
@@ -132,9 +132,9 @@ if ($cloudFrontUrl) {
     Write-Host ""
     Write-Host "📚 Next Steps:" -ForegroundColor Cyan
     Write-Host "   1. Wait for CloudFront deployment to complete (check AWS Console)"
-    Write-Host "   2. Test: curl $cloudFrontUrl/v1/days-until/2027-01-01"
+    Write-Host "   2. Test: curl $cloudFrontUrl/v1/2027-01-01"
     if ($customDomainUrl -and $customDomainUrl -ne "") {
-        Write-Host "   3. Use custom domain: $customDomainUrl/v1/days-until/2027-01-01"
+        Write-Host "   3. Use custom domain: $customDomainUrl/v1/2027-01-01"
     }
     Write-Host ""
     Write-Host "💡 Cache Info:" -ForegroundColor Cyan

@@ -20,7 +20,7 @@ npm install
 node -e "
 import('./src/index.js').then(module => {
   const event = {
-    path: '/v1/days-until/2027-01-01',
+    path: '/v1/2027-01-01',
     httpMethod: 'GET',
     queryStringParameters: null
   };
@@ -187,13 +187,13 @@ API_URL=$(aws cloudformation describe-stacks \
   --output text)
 
 # Test basic endpoint
-curl "${API_URL}/v1/days-until/2027-01-01"
+curl "${API_URL}/v1/2027-01-01"
 
 # Test with custom label and color
-curl "${API_URL}/v1/days-until/2027-12-25?label=Christmas&color=green"
+curl "${API_URL}/v1/2027-12-25?label=Christmas&color=green"
 
 # Test with past date
-curl "${API_URL}/v1/days-until/2020-01-01"
+curl "${API_URL}/v1/2020-01-01"
 ```
 
 ### Expected responses

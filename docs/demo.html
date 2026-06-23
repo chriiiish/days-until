@@ -222,7 +222,7 @@
             const customTitle = document.getElementById('customTitle').value.trim();
             
             // Build API URL
-            let apiUrl = `${API_BASE_URL}/v1/days-until/${targetDate}`;
+            let apiUrl = `${API_BASE_URL}/v1/${targetDate}`;
             if (customTitle) {
                 apiUrl += `?title=${encodeURIComponent(customTitle)}`;
             }

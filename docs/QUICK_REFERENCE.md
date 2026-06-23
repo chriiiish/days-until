@@ -4,7 +4,7 @@
 
 ### Test Locally
 ```bash
-node -e "import('./src/index.js').then(m => m.handler({path: '/v1/days-until/2027-01-01', httpMethod: 'GET', queryStringParameters: null}).then(r => console.log(JSON.stringify(r, null, 2))))"
+node -e "import('./src/index.js').then(m => m.handler({path: '/v1/2027-01-01', httpMethod: 'GET', queryStringParameters: null}).then(r => console.log(JSON.stringify(r, null, 2))))"
 ```
 
 ### Package Lambda
@@ -46,8 +46,8 @@ aws cloudformation describe-stacks \
 ### Test API
 ```bash
 API_URL=$(aws cloudformation describe-stacks --stack-name days-until-api --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" --output text)
-curl "${API_URL}/v1/days-until/2027-01-01"
-curl "${API_URL}/v1/days-until/2027-12-25?label=Christmas&color=green"
+curl "${API_URL}/v1/2027-01-01"
+curl "${API_URL}/v1/2027-12-25?label=Christmas&color=green"
 ```
 
 ### View Logs
@@ -74,15 +74,15 @@ aws cloudformation delete-stack --stack-name days-until-api
 ### Bash
 ```bash
 # Basic request
-curl https://days-until.cjl.nz/v1/days-until/2027-01-01
+curl https://days-until.cjl.nz/v1/2027-01-01
 
 # With custom label and color
-curl "https://days-until.cjl.nz/v1/days-until/2027-12-25?label=Christmas&color=green"
+curl "https://days-until.cjl.nz/v1/2027-12-25?label=Christmas&color=green"
 ```
 
 ### JavaScript/Node.js
 ```javascript
-const response = await fetch('https://days-until.cjl.nz/v1/days-until/2027-01-01');
+const response = await fetch('https://days-until.cjl.nz/v1/2027-01-01');
 const data = await response.json();
 console.log(data);
 // { schemaVersion: 1, label: "Days Remaining", message: "557 days", color: "blue" }
@@ -91,7 +91,7 @@ console.log(data);
 ### Python
 ```python
 import requests
-response = requests.get('https://days-until.cjl.nz/v1/days-until/2027-01-01')
+response = requests.get('https://days-until.cjl.nz/v1/2027-01-01')
 print(response.json())
 # {'schemaVersion': 1, 'label': 'Days Remaining', 'message': '557 days', 'color': 'blue'}
 ```

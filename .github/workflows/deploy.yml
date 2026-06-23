@@ -94,7 +94,7 @@ jobs:
           sleep 5  # Wait for deployment to propagate
           
           # Test with a future date
-          RESPONSE=$(curl -s "${{ steps.get_url.outputs.api_url }}/v1/days-until/2027-01-01")
+          RESPONSE=$(curl -s "${{ steps.get_url.outputs.api_url }}/v1/2027-01-01")
           echo "Test response: ${RESPONSE}"
           
           # Verify response contains "days" field
@@ -116,5 +116,5 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Example Usage" >> $GITHUB_STEP_SUMMARY
           echo '```bash' >> $GITHUB_STEP_SUMMARY
-          echo "curl ${{ steps.get_url.outputs.api_url }}/v1/days-until/2027-01-01" >> $GITHUB_STEP_SUMMARY
+          echo "curl ${{ steps.get_url.outputs.api_url }}/v1/2027-01-01" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY

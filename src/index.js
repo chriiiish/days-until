@@ -34,8 +34,8 @@ export const handler = async (event) => {
   }
 
   try {
-    // Extract date from path: /v1/days-until/yyyy-mm-dd
-    const pathMatch = uri.match(/\/v1\/days-until\/(\d{4}-\d{2}-\d{2})/);
+    // Extract date from path: /v1/yyyy-mm-dd
+    const pathMatch = uri.match(/\/v1\/(\d{4}-\d{2}-\d{2})/);
     
     if (!pathMatch) {
       return {
@@ -46,7 +46,7 @@ export const handler = async (event) => {
           'access-control-allow-origin': [{ key: 'Access-Control-Allow-Origin', value: '*' }],
         },
         body: JSON.stringify({
-          error: 'Invalid path format. Expected: /v1/days-until/yyyy-mm-dd',
+          error: 'Invalid path format. Expected: /v1/yyyy-mm-dd',
         }),
       };
     }

@@ -22,19 +22,19 @@ A lightweight, serverless API that calculates the number of days from today to a
 
 Calculate days until a future date:
 ```bash
-curl https://days-until.cjl.nz/v1/days-until/2027-01-01
+curl https://days-until.cjl.nz/v1/2027-01-01
 # Response: {"schemaVersion": 1, "label": "Days Remaining", "message": "557 days", "color": "blue"}
 ```
 
 Calculate days with a custom label:
 ```bash
-curl https://days-until.cjl.nz/v1/days-until/2027-12-25?label=Christmas
+curl https://days-until.cjl.nz/v1/2027-12-25?label=Christmas
 # Response: {"schemaVersion": 1, "label": "Christmas", "message": "557 days", "color": "blue"}
 ```
 
 Calculate days since a past date:
 ```bash
-curl https://days-until.cjl.nz/v1/days-until/2020-01-01
+curl https://days-until.cjl.nz/v1/2020-01-01
 # Response: {"schemaVersion": 1, "label": "Days Remaining", "message": "-2364 days", "color": "blue"}
 ```
 
@@ -43,8 +43,8 @@ curl https://days-until.cjl.nz/v1/days-until/2020-01-01
 The response format is compatible with [Shields.io Endpoint Badge](https://shields.io/badges/endpoint-badge). Create dynamic badges in your README:
 
 ```markdown
-![Days Until 2027](https://img.shields.io/endpoint?url=https://days-until.cjl.nz/v1/days-until/2027-01-01)
-![Christmas Countdown](https://img.shields.io/endpoint?url=https://days-until.cjl.nz/v1/days-until/2027-12-25?label=Christmas&color=red)
+![Days Until 2027](https://img.shields.io/endpoint?url=https://days-until.cjl.nz/v1/2027-01-01)
+![Christmas Countdown](https://img.shields.io/endpoint?url=https://days-until.cjl.nz/v1/2027-12-25?label=Christmas&color=red)
 ```
 
 ### JavaScript Example
@@ -55,7 +55,7 @@ async function getDaysUntil(date, label = null, color = 'blue') {
   if (label) params.append('label', label);
   if (color) params.append('color', color);
   
-  const url = `https://days-until.cjl.nz/v1/days-until/${date}${params.toString() ? '?' + params.toString() : ''}`;
+  const url = `https://days-until.cjl.nz/v1/${date}${params.toString() ? '?' + params.toString() : ''}`;
   const response = await fetch(url);
   return response.json();
 }
@@ -71,7 +71,7 @@ console.log(result);
 ### Endpoint
 
 ```
-GET /v1/days-until/{date}
+GET /v1/{date}
 ```
 
 ### Path Parameters
@@ -157,7 +157,7 @@ import('./src/index.js').then(module => {
     Records: [{
       cf: {
         request: {
-          uri: '/v1/days-until/2027-01-01',
+          uri: '/v1/2027-01-01',
           method: 'GET',
           querystring: 'label=Test&color=blue'
         }

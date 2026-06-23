@@ -91,8 +91,8 @@ Resources:
             }
 
             try {
-              // Extract date from path: /v1/days-until/yyyy-mm-dd
-              const pathMatch = uri.match(/\/v1\/days-until\/(\d{4}-\d{2}-\d{2})/);
+              // Extract date from path: /v1/yyyy-mm-dd
+              const pathMatch = uri.match(/\/v1\/(\d{4}-\d{2}-\d{2})/);
               
               if (!pathMatch) {
                 return {
@@ -103,7 +103,7 @@ Resources:
                     'access-control-allow-origin': [{ key: 'Access-Control-Allow-Origin', value: '*' }],
                   },
                   body: JSON.stringify({
-                    error: 'Invalid path format. Expected: /v1/days-until/yyyy-mm-dd',
+                    error: 'Invalid path format. Expected: /v1/yyyy-mm-dd',
                   }),
                 };
               }
@@ -186,6 +186,21 @@ Resources:
     Properties:
       FunctionName: !Ref DaysUntilFunction
       Description: 'Version for Lambda@Edge deployment'
+
+  # Lambda Permission for CloudFront and Edge replication
+  LambdaEdgePermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      FunctionName: !GetAtt DaysUntilFunction.Arn
+      Action: 'lambda:GetFunction'
+      Principal: 'replicator.lambda.amazonaws.com'
+
+  LambdaEdgeInvokePermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      FunctionName: !GetAtt DaysUntilFunction.Arn
+      Action: 'lambda:InvokeFunction'
+      Principal: 'edgelambda.amazonaws.com'
 
   # Lambda Log Group
   LambdaLogGroup:

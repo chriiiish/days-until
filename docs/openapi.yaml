@@ -8,8 +8,8 @@ info:
     ## Usage
     
     Simply call the endpoint with a date in yyyy-mm-dd format:
-    - `/v1/days-until/2026-12-25` returns badge-style JSON
-    - `/v1/days-until/2026-12-25?label=Christmas&color=green` customizes the badge
+    - `/v1/2026-12-25` returns badge-style JSON
+    - `/v1/2026-12-25?label=Christmas&color=green` customizes the badge
     
     The API calculates the difference from today (UTC midnight) to the target date (UTC midnight).
     
@@ -17,7 +17,7 @@ info:
     
     Use with Shields.io to create dynamic badges:
     ```markdown
-    ![Badge](https://img.shields.io/endpoint?url=https://days-until.cjl.nz/v1/days-until/2027-12-25?label=Christmas&color=red)
+    ![Badge](https://img.shields.io/endpoint?url=https://days-until.cjl.nz/v1/2027-12-25?label=Christmas&color=red)
     ```
     
   version: 1.0.0
@@ -37,7 +37,7 @@ tags:
     description: Date calculation endpoints
 
 paths:
-  /v1/days-until/{date}:
+  /v1/{date}:
     get:
       tags:
         - calculations
@@ -116,7 +116,7 @@ paths:
                 invalid_path:
                   summary: Invalid path
                   value:
-                    error: 'Invalid path format. Expected: /v1/days-until/yyyy-mm-dd'
+                    error: 'Invalid path format. Expected: /v1/yyyy-mm-dd'
         '500':
           description: Internal server error
           content:
