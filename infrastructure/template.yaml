@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Days Until API - Lightweight API Gateway with Lambda'
+Description: 'Days Until API - CloudFront with Lambda@Edge'
 
 Parameters:
   DomainName:
@@ -14,7 +14,7 @@ Parameters:
 
   CertificateArn:
     Type: String
-    Description: 'ACM Certificate ARN for the custom domain (must be in us-east-1 for API Gateway)'
+    Description: 'ACM Certificate ARN for CloudFront (must be in us-east-1)'
     Default: ''
 
 Conditions:
@@ -22,8 +22,8 @@ Conditions:
   HasCertificate: !Not [!Equals [!Ref CertificateArn, '']]
 
 Resources:
-  # Lambda Execution Role
-  LambdaExecutionRole:
+  # Lambda@Edge Execution Role
+  LambdaEdgeExecutionRole:
     Type: 'AWS::IAM::Role'
     Properties:
       AssumeRolePolicyDocument:
@@ -31,7 +31,9 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              Service: lambda.amazonaws.com
+              Service:
+                - lambda.amazonaws.com
+                - edgelambda.amazonaws.com
             Action: 'sts:AssumeRole'
       ManagedPolicyArns:
         - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
@@ -39,34 +41,39 @@ Resources:
         - Key: Project
           Value: DaysUntil
 
-  # Lambda Function
+  # Lambda@Edge Function (must be in us-east-1)
   DaysUntilFunction:
     Type: 'AWS::Lambda::Function'
     Properties:
-      FunctionName: days-until-api
+      FunctionName: days-until-edge
       Runtime: nodejs22.x
       Handler: index.handler
-      Role: !GetAtt LambdaExecutionRole.Arn
+      Role: !GetAtt LambdaEdgeExecutionRole.Arn
       Code:
         ZipFile: |
           export const handler = async (event) => {
             return {
-              statusCode: 200,
+              status: '200',
+              statusDescription: 'OK',
               headers: {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
+                'content-type': [{ key: 'Content-Type', value: 'application/json' }],
+                'access-control-allow-origin': [{ key: 'Access-Control-Allow-Origin', value: '*' }],
               },
               body: JSON.stringify({ message: 'Placeholder - deploy actual code' })
             };
           };
-      Timeout: 10
+      Timeout: 5  # Lambda@Edge limit for origin-request
       MemorySize: 128
-      Environment:
-        Variables:
-          NODE_ENV: production
       Tags:
         - Key: Project
           Value: DaysUntil
+
+  # Lambda@Edge Version (CloudFront requires a specific version, not $LATEST)
+  DaysUntilFunctionVersion:
+    Type: 'AWS::Lambda::Version'
+    Properties:
+      FunctionName: !Ref DaysUntilFunction
+      Description: 'Version for Lambda@Edge deployment'
 
   # Lambda Log Group
   LambdaLogGroup:
@@ -78,143 +85,74 @@ Resources:
         - Key: Project
           Value: DaysUntil
 
-  # API Gateway REST API
-  DaysUntilApi:
-    Type: 'AWS::ApiGateway::RestApi'
+  # CloudFront Cache Policy
+  ApiCachePolicy:
+    Type: 'AWS::CloudFront::CachePolicy'
     Properties:
-      Name: days-until-api
-      Description: 'API to calculate days until a target date'
-      EndpointConfiguration:
-        Types:
-          - REGIONAL
+      CachePolicyConfig:
+        Name: !Sub '${AWS::StackName}-cache-policy'
+        Comment: '6-hour cache with query string support'
+        DefaultTTL: 21600  # 6 hours
+        MaxTTL: 21600      # 6 hours
+        MinTTL: 21600      # 6 hours
+        ParametersInCacheKeyAndForwardedToOrigin:
+          EnableAcceptEncodingGzip: true
+          EnableAcceptEncodingBrotli: true
+          QueryStringsConfig:
+            QueryStringBehavior: all  # Cache based on query params (label, color)
+          HeadersConfig:
+            HeaderBehavior: none
+          CookiesConfig:
+            CookieBehavior: none
+
+  # CloudFront Distribution (with Lambda@Edge)
+  CloudFrontDistribution:
+    Type: 'AWS::CloudFront::Distribution'
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: 'CloudFront distribution for Days Until API with Lambda@Edge'
+        HttpVersion: http2and3
+        PriceClass: PriceClass_100  # Use only North America and Europe edges (cheapest)
+        Aliases:
+          !If
+            - HasCertificate
+            - [!Ref DomainName]
+            - !Ref 'AWS::NoValue'
+        ViewerCertificate:
+          !If
+            - HasCertificate
+            - AcmCertificateArn: !Ref CertificateArn
+              SslSupportMethod: sni-only
+              MinimumProtocolVersion: TLSv1.2_2021
+            - CloudFrontDefaultCertificate: true
+        Origins:
+          - Id: DummyOrigin
+            DomainName: example.com  # Dummy origin (Lambda@Edge generates response)
+            CustomOriginConfig:
+              HTTPSPort: 443
+              OriginProtocolPolicy: https-only
+        DefaultCacheBehavior:
+          TargetOriginId: DummyOrigin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          CachedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          CachePolicyId: !Ref ApiCachePolicy
+          Compress: true
+          LambdaFunctionAssociations:
+            - EventType: origin-request
+              LambdaFunctionARN: !Ref DaysUntilFunctionVersion  # Must use versioned ARN
       Tags:
         - Key: Project
           Value: DaysUntil
 
-  # API Gateway Resource: /v1
-  V1Resource:
-    Type: 'AWS::ApiGateway::Resource'
-    Properties:
-      RestApiId: !Ref DaysUntilApi
-      ParentId: !GetAtt DaysUntilApi.RootResourceId
-      PathPart: v1
-
-  # API Gateway Resource: /v1/days-until
-  DaysUntilResource:
-    Type: 'AWS::ApiGateway::Resource'
-    Properties:
-      RestApiId: !Ref DaysUntilApi
-      ParentId: !Ref V1Resource
-      PathPart: days-until
-
-  # API Gateway Resource: /v1/days-until/{date}
-  DateResource:
-    Type: 'AWS::ApiGateway::Resource'
-    Properties:
-      RestApiId: !Ref DaysUntilApi
-      ParentId: !Ref DaysUntilResource
-      PathPart: '{date}'
-
-  # GET Method for /v1/days-until/{date}
-  GetMethod:
-    Type: 'AWS::ApiGateway::Method'
-    Properties:
-      RestApiId: !Ref DaysUntilApi
-      ResourceId: !Ref DateResource
-      HttpMethod: GET
-      AuthorizationType: NONE
-      Integration:
-        Type: AWS_PROXY
-        IntegrationHttpMethod: POST
-        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DaysUntilFunction.Arn}/invocations'
-      MethodResponses:
-        - StatusCode: 200
-          ResponseParameters:
-            method.response.header.Access-Control-Allow-Origin: true
-
-  # OPTIONS Method for CORS
-  OptionsMethod:
-    Type: 'AWS::ApiGateway::Method'
-    Properties:
-      RestApiId: !Ref DaysUntilApi
-      ResourceId: !Ref DateResource
-      HttpMethod: OPTIONS
-      AuthorizationType: NONE
-      Integration:
-        Type: MOCK
-        IntegrationResponses:
-          - StatusCode: 200
-            ResponseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-              method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
-            ResponseTemplates:
-              application/json: ''
-        PassthroughBehavior: WHEN_NO_MATCH
-        RequestTemplates:
-          application/json: '{"statusCode": 200}'
-      MethodResponses:
-        - StatusCode: 200
-          ResponseParameters:
-            method.response.header.Access-Control-Allow-Headers: true
-            method.response.header.Access-Control-Allow-Methods: true
-            method.response.header.Access-Control-Allow-Origin: true
-
-  # API Gateway Deployment
-  ApiDeployment:
-    Type: 'AWS::ApiGateway::Deployment'
-    DependsOn:
-      - GetMethod
-      - OptionsMethod
-    Properties:
-      RestApiId: !Ref DaysUntilApi
-
-  # API Gateway Stage
-  ApiStage:
-    Type: 'AWS::ApiGateway::Stage'
-    Properties:
-      RestApiId: !Ref DaysUntilApi
-      DeploymentId: !Ref ApiDeployment
-      StageName: prod
-      Description: 'Production stage'
-      Tags:
-        - Key: Project
-          Value: DaysUntil
-
-  # Lambda Permission for API Gateway
-  LambdaApiPermission:
-    Type: 'AWS::Lambda::Permission'
-    Properties:
-      FunctionName: !Ref DaysUntilFunction
-      Action: 'lambda:InvokeFunction'
-      Principal: apigateway.amazonaws.com
-      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${DaysUntilApi}/*/*/*'
-
-  # Custom Domain Name (optional)
-  ApiCustomDomain:
-    Type: 'AWS::ApiGateway::DomainName'
-    Condition: HasCertificate
-    Properties:
-      DomainName: !Ref DomainName
-      RegionalCertificateArn: !Ref CertificateArn
-      EndpointConfiguration:
-        Types:
-          - REGIONAL
-      Tags:
-        - Key: Project
-          Value: DaysUntil
-
-  # Base Path Mapping
-  ApiBasePathMapping:
-    Type: 'AWS::ApiGateway::BasePathMapping'
-    Condition: HasCertificate
-    DependsOn: ApiStage
-    Properties:
-      DomainName: !Ref ApiCustomDomain
-      RestApiId: !Ref DaysUntilApi
-      Stage: !Ref ApiStage
-
-  # Route53 Record (optional)
+  # Route53 Record (points to CloudFront)
   ApiDNSRecord:
     Type: 'AWS::Route53::RecordSet'
     Condition: CreateDNSRecord
@@ -223,15 +161,15 @@ Resources:
       Name: !Ref DomainName
       Type: A
       AliasTarget:
-        DNSName: !GetAtt ApiCustomDomain.RegionalDomainName
-        HostedZoneId: !GetAtt ApiCustomDomain.RegionalHostedZoneId
+        DNSName: !GetAtt CloudFrontDistribution.DomainName
+        HostedZoneId: Z2FDTNDATAQYW2  # CloudFront hosted zone ID (constant for all distributions)
 
 Outputs:
-  ApiUrl:
-    Description: 'API Gateway endpoint URL'
-    Value: !Sub 'https://${DaysUntilApi}.execute-api.${AWS::Region}.amazonaws.com/prod'
+  CloudFrontUrl:
+    Description: 'CloudFront distribution URL (use this endpoint)'
+    Value: !Sub 'https://${CloudFrontDistribution.DomainName}'
     Export:
-      Name: !Sub '${AWS::StackName}-ApiUrl'
+      Name: !Sub '${AWS::StackName}-CloudFrontUrl'
 
   CustomDomainUrl:
     Description: 'Custom domain URL (if configured)'
@@ -239,14 +177,22 @@ Outputs:
     Condition: HasCertificate
 
   LambdaFunctionName:
-    Description: 'Lambda function name'
+    Description: 'Lambda@Edge function name'
     Value: !Ref DaysUntilFunction
     Export:
       Name: !Sub '${AWS::StackName}-LambdaFunction'
 
   LambdaFunctionArn:
-    Description: 'Lambda function ARN'
+    Description: 'Lambda@Edge function ARN'
     Value: !GetAtt DaysUntilFunction.Arn
+
+  LambdaFunctionVersion:
+    Description: 'Lambda@Edge function version ARN'
+    Value: !Ref DaysUntilFunctionVersion
+
+  CloudFrontDistributionId:
+    Description: 'CloudFront distribution ID'
+    Value: !Ref CloudFrontDistribution
 
   ApiId:
     Description: 'API Gateway ID'

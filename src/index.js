@@ -1,35 +1,46 @@
 /**
- * Lambda handler for days-until API
+ * Lambda@Edge handler for days-until API
  * Calculates the number of days from today to a target date
  * Returns badge-style JSON format
+ * Triggered on CloudFront origin-request (cache miss)
  */
 
 export const handler = async (event) => {
-  // Set CORS headers
-  const headers = {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-  };
+  const request = event.Records[0].cf.request;
+  const uri = request.uri;
+  const querystring = request.querystring;
 
+  // Parse query parameters
+  const params = new URLSearchParams(querystring);
+  
   // Handle OPTIONS preflight request
-  if (event.httpMethod === 'OPTIONS') {
+  if (request.method === 'OPTIONS') {
     return {
-      statusCode: 200,
-      headers,
+      status: '200',
+      statusDescription: 'OK',
+      headers: {
+        'content-type': [{ key: 'Content-Type', value: 'application/json' }],
+        'access-control-allow-origin': [{ key: 'Access-Control-Allow-Origin', value: '*' }],
+        'access-control-allow-methods': [{ key: 'Access-Control-Allow-Methods', value: 'GET, OPTIONS' }],
+        'access-control-allow-headers': [{ key: 'Access-Control-Allow-Headers', value: 'Content-Type' }],
+        'cache-control': [{ key: 'Cache-Control', value: 'public, max-age=21600' }],
+      },
       body: '',
     };
   }
 
   try {
     // Extract date from path: /v1/days-until/yyyy-mm-dd
-    const pathMatch = event.path.match(/\/v1\/days-until\/(\d{4}-\d{2}-\d{2})/);
+    const pathMatch = uri.match(/\/v1\/days-until\/(\d{4}-\d{2}-\d{2})/);
     
     if (!pathMatch) {
       return {
-        statusCode: 400,
-        headers,
+        status: '400',
+        statusDescription: 'Bad Request',
+        headers: {
+          'content-type': [{ key: 'Content-Type', value: 'application/json' }],
+          'access-control-allow-origin': [{ key: 'Access-Control-Allow-Origin', value: '*' }],
+        },
         body: JSON.stringify({
           error: 'Invalid path format. Expected: /v1/days-until/yyyy-mm-dd',
         }),
@@ -44,8 +55,12 @@ export const handler = async (event) => {
     // Validate date
     if (Number.isNaN(targetDate.getTime())) {
       return {
-        statusCode: 400,
-        headers,
+        status: '400',
+        statusDescription: 'Bad Request',
+        headers: {
+          'content-type': [{ key: 'Content-Type', value: 'application/json' }],
+          'access-control-allow-origin': [{ key: 'Access-Control-Allow-Origin', value: '*' }],
+        },
         body: JSON.stringify({
           error: 'Invalid date format. Use yyyy-mm-dd',
         }),
@@ -60,10 +75,8 @@ export const handler = async (event) => {
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
     // Get query parameters (support both 'color' and 'colour' spellings)
-    const label = event.queryStringParameters?.label || 'Days Remaining';
-    const color = event.queryStringParameters?.color || 
-                  event.queryStringParameters?.colour || 
-                  'blue';
+    const label = params.get('label') || 'Days Remaining';
+    const color = params.get('color') || params.get('colour') || 'blue';
 
     // Build badge-style response
     const response = {
@@ -74,8 +87,13 @@ export const handler = async (event) => {
     };
 
     return {
-      statusCode: 200,
-      headers,
+      status: '200',
+      statusDescription: 'OK',
+      headers: {
+        'content-type': [{ key: 'Content-Type', value: 'application/json' }],
+        'access-control-allow-origin': [{ key: 'Access-Control-Allow-Origin', value: '*' }],
+        'cache-control': [{ key: 'Cache-Control', value: 'public, max-age=21600' }],
+      },
       body: JSON.stringify(response),
     };
 
@@ -83,8 +101,12 @@ export const handler = async (event) => {
     console.error('Error processing request:', error);
     
     return {
-      statusCode: 500,
-      headers,
+      status: '500',
+      statusDescription: 'Internal Server Error',
+      headers: {
+        'content-type': [{ key: 'Content-Type', value: 'application/json' }],
+        'access-control-allow-origin': [{ key: 'Access-Control-Allow-Origin', value: '*' }],
+      },
       body: JSON.stringify({
         error: 'Internal server error',
       }),
