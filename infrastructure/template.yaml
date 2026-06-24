@@ -220,7 +220,7 @@ Resources:
                 headers: {
                   'content-type': [{ key: 'Content-Type', value: 'application/json' }],
                   'access-control-allow-origin': [{ key: 'Access-Control-Allow-Origin', value: '*' }],
-                  'cache-control': [{ key: 'Cache-Control', value: 'public, max-age=21600' }],
+                  'cache-control': [{ key: 'Cache-Control', value: 'public, max-age=3600' }],
                 },
                 body: JSON.stringify(response),
               };
@@ -285,10 +285,10 @@ Resources:
     Properties:
       CachePolicyConfig:
         Name: !Sub '${AWS::StackName}-cache-policy'
-        Comment: '6-hour cache with query string support'
-        DefaultTTL: 21600  # 6 hours
-        MaxTTL: 21600      # 6 hours
-        MinTTL: 21600      # 6 hours
+        Comment: '1-hour cache with query string support'
+        DefaultTTL: 3600  # 1 hour
+        MaxTTL: 3600      # 1 hour
+        MinTTL: 3600      # 1 hour
         ParametersInCacheKeyAndForwardedToOrigin:
           EnableAcceptEncodingGzip: true
           EnableAcceptEncodingBrotli: true
