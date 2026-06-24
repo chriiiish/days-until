@@ -26,6 +26,12 @@ curl https://days-until.cjl.nz/v1/2027-01-01
 # Response: {"schemaVersion": 1, "label": "Days Remaining", "message": "557 days", "color": "blue"}
 ```
 
+Calculate days using a specific timezone (path suffix):
+```bash
+curl https://days-until.cjl.nz/v1/2027-01-01/Pacific/Auckland
+# Use standard JavaScript IANA timezone names
+```
+
 Calculate days with a custom label:
 ```bash
 curl https://days-until.cjl.nz/v1/2027-12-25?label=Christmas
@@ -72,6 +78,7 @@ console.log(result);
 
 ```
 GET /v1/{date}
+GET /v1/{date}/{timezone}
 ```
 
 ### Path Parameters
@@ -79,6 +86,7 @@ GET /v1/{date}
 | Parameter | Type   | Required | Description                      |
 |-----------|--------|----------|----------------------------------|
 | date      | string | Yes      | Target date in `yyyy-mm-dd` format |
+| timezone  | string | No       | Timezone used to determine "today" (IANA like `Pacific/Auckland`) |
 
 ### Query Parameters
 

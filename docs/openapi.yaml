@@ -9,6 +9,7 @@ info:
     
     Simply call the endpoint with a date in yyyy-mm-dd format:
     - `/v1/2026-12-25` returns badge-style JSON
+    - `/v1/2026-12-25/Pacific/Auckland` calculates using New Zealand timezone
     - `/v1/2026-12-25?label=Christmas&color=green` customizes the badge
     
     The API calculates the difference from today (UTC midnight) to the target date (UTC midnight).
@@ -125,6 +126,71 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
               example:
                 error: 'Internal server error'
+
+  /v1/{date}/{timezone}:
+    get:
+      tags:
+        - calculations
+      summary: Calculate days until a target date in a specific timezone
+      description: |
+        Returns the number of days from today to the specified target date in Shields.io badge format,
+        where "today" is evaluated in the provided timezone.
+      operationId: getDaysUntilWithTimezone
+      parameters:
+        - name: date
+          in: path
+          required: true
+          description: Target date in yyyy-mm-dd format
+          schema:
+            type: string
+            format: date
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+            example: '2026-12-31'
+        - name: timezone
+          in: path
+          required: true
+          description: IANA timezone (e.g. Pacific/Auckland)
+          schema:
+            type: string
+            example: 'Pacific/Auckland'
+        - name: label
+          in: query
+          required: false
+          description: Custom label for the badge (default is "Days Remaining")
+          schema:
+            type: string
+            example: 'Christmas'
+        - name: color
+          in: query
+          required: false
+          description: Badge color (default is "blue"). Also accepts "colour" spelling
+          schema:
+            type: string
+            example: 'green'
+      responses:
+        '200':
+          description: Successful calculation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadgeResponse'
+        '400':
+          description: Invalid date, timezone, or path format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalid_timezone:
+                  summary: Invalid timezone
+                  value:
+                    error: 'Invalid timezone. Use a valid IANA timezone (e.g. Pacific/Auckland)'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
 components:
   schemas:
