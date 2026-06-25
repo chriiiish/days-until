@@ -26,7 +26,7 @@ try {
 }
 
 # Configuration
-$stackName = "days-until-api"
+$stackName = "days-until"
 $region = "us-east-1"  # Lambda@Edge MUST be in us-east-1
 
 Write-Host ""
@@ -44,21 +44,20 @@ Write-Host ""
 $useDomain = Read-Host "Do you want to configure a custom domain? (y/n)"
 if ($useDomain -eq "y") {
     $domainName = Read-Host "Enter domain name (e.g., days-until.cjl.nz)"
-    $certArn = Read-Host "Enter ACM Certificate ARN (must be in us-east-1 for CloudFront)"
     $hostedZoneId = Read-Host "Enter Route53 Hosted Zone ID (optional, press Enter to skip)"
     
     if ($hostedZoneId) {
         aws cloudformation deploy `
             --template-file infrastructure/template.yaml `
             --stack-name $stackName `
-            --parameter-overrides "DomainName=$domainName" "CertificateArn=$certArn" "HostedZoneId=$hostedZoneId" `
+            --parameter-overrides "DomainName=$domainName" "HostedZoneId=$hostedZoneId" `
             --capabilities CAPABILITY_IAM `
             --region $region
     } else {
         aws cloudformation deploy `
             --template-file infrastructure/template.yaml `
             --stack-name $stackName `
-            --parameter-overrides "DomainName=$domainName" "CertificateArn=$certArn" `
+            --parameter-overrides "DomainName=$domainName" `
             --capabilities CAPABILITY_IAM `
             --region $region
     }
@@ -100,6 +99,12 @@ $distributionId = aws cloudformation describe-stacks `
     --output text `
     --region $region
 
+$docsBucketName = aws cloudformation describe-stacks `
+    --stack-name $stackName `
+    --query "Stacks[0].Outputs[?OutputKey=='DocsBucketName'].OutputValue" `
+    --output text `
+    --region $region
+
 if ($cloudFrontUrl) {
     Write-Host "✅ API deployed successfully!" -ForegroundColor Green
     Write-Host ""
@@ -111,6 +116,31 @@ if ($cloudFrontUrl) {
     Write-Host "  Distribution ID: $distributionId" -ForegroundColor Gray
     Write-Host "═══════════════════════════════════════════════" -ForegroundColor Cyan
     Write-Host ""
+
+    # Upload Swagger docs to S3 origin bucket
+    if ($docsBucketName -and $docsBucketName -ne "None") {
+        Write-Host "📄 Uploading Swagger docs to S3 bucket: $docsBucketName" -ForegroundColor Yellow
+
+        aws s3 cp "docs/index.html" "s3://$docsBucketName/index.html" --content-type "text/html; charset=utf-8"
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ Failed to upload /index.html" -ForegroundColor Red
+            exit 1
+        }
+
+        aws s3 cp "docs/openapi.yaml" "s3://$docsBucketName/openapi.yaml" --content-type "application/yaml"
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ Failed to upload /openapi.yaml" -ForegroundColor Red
+            exit 1
+        }
+
+        Write-Host "✅ Swagger docs uploaded" -ForegroundColor Green
+
+        if ($distributionId -and $distributionId -ne "None") {
+            Write-Host "🔄 Invalidating CloudFront cache for docs paths..." -ForegroundColor Yellow
+            aws cloudfront create-invalidation --distribution-id $distributionId --paths "/" "/index.html" "/openapi.yaml" | Out-Null
+            Write-Host "✅ Invalidation submitted" -ForegroundColor Green
+        }
+    }
     
     # Test the API
     Write-Host "🧪 Testing API..." -ForegroundColor Yellow
@@ -138,7 +168,7 @@ if ($cloudFrontUrl) {
     }
     Write-Host ""
     Write-Host "💡 Cache Info:" -ForegroundColor Cyan
-    Write-Host "   - Responses cached for 6 hours at CloudFront edge locations"
+    Write-Host "   - API responses cached for 1 hour at CloudFront edge locations"
     Write-Host "   - Lambda@Edge only runs on cache misses (huge cost savings!)"
     Write-Host "   - To invalidate cache: aws cloudfront create-invalidation --distribution-id $distributionId --paths '/*'"
     Write-Host ""

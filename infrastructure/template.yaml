@@ -1,5 +1,8 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Days Until API - CloudFront with Lambda@Edge'
+Description: | 
+  Days Until API
+  A lightweight API to calculate the number of days from today to a target date.
+  Returns responses in Shields.io Endpoint Badge format.
 
 Parameters:
   DomainName:
@@ -59,187 +62,15 @@ Resources:
       Role: !GetAtt LambdaEdgeExecutionRole.Arn
       Code:
         ZipFile: |
-          /**
-           * Lambda@Edge handler for days-until API
-           * Calculates the number of days from today to a target date
-           * Returns badge-style JSON format
-           * Triggered on CloudFront origin-request (cache miss)
-           */
-
-          export const handler = async (event) => {
-            const request = event.Records[0].cf.request;
-            const uri = request.uri;
-            const querystring = request.querystring;
-
-            const MS_PER_DAY = 1000 * 60 * 60 * 24;
-
-            const parseDateString = (dateStr) => {
-              const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-              if (!match) {
-                return null;
-              }
-
-              const year = Number(match[1]);
-              const month = Number(match[2]);
-              const day = Number(match[3]);
-              const date = new Date(Date.UTC(year, month - 1, day));
-
-              if (
-                date.getUTCFullYear() !== year ||
-                date.getUTCMonth() !== month - 1 ||
-                date.getUTCDate() !== day
-              ) {
-                return null;
-              }
-
-              return { year, month, day };
-            };
-
-            const toEpochDay = ({ year, month, day }) => {
-              return Math.floor(Date.UTC(year, month - 1, day) / MS_PER_DAY);
-            };
-
-            const isValidTimezone = (timezone) => {
-              try {
-                new Intl.DateTimeFormat('en-US', { timeZone: timezone }).format(new Date());
-                return true;
-              } catch {
-                return false;
-              }
-            };
-
-            const getTodayInTimezone = (timezone) => {
-              const now = new Date();
-              const formatter = new Intl.DateTimeFormat('en-CA', {
-                timeZone: timezone,
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-              });
-
-              const parts = formatter.formatToParts(now);
-              const year = Number(parts.find((part) => part.type === 'year').value);
-              const month = Number(parts.find((part) => part.type === 'month').value);
-              const day = Number(parts.find((part) => part.type === 'day').value);
-
-              return { year, month, day };
-            };
-
-            // Parse query parameters
-            const params = new URLSearchParams(querystring);
-            
-            // Handle OPTIONS preflight request
-            if (request.method === 'OPTIONS') {
+          exports.handler = async (event) => {
               return {
-                status: '200',
-                statusDescription: 'OK',
-                headers: {
-                  'content-type': [{ key: 'Content-Type', value: 'application/json' }],
-                  'access-control-allow-origin': [{ key: 'Access-Control-Allow-Origin', value: '*' }],
-                  'access-control-allow-methods': [{ key: 'Access-Control-Allow-Methods', value: 'GET, OPTIONS' }],
-                  'access-control-allow-headers': [{ key: 'Access-Control-Allow-Headers', value: 'Content-Type' }],
-                  'cache-control': [{ key: 'Cache-Control', value: 'public, max-age=21600' }],
-                },
-                body: '',
-              };
-            }
-
-            try {
-              // Extract date and optional timezone from path: /v1/yyyy-mm-dd[/timezone]
-              const pathMatch = uri.match(/^\/v1\/(\d{4}-\d{2}-\d{2})(?:\/([A-Za-z0-9_+\-/]+))?\/?$/);
-              
-              if (!pathMatch) {
-                return {
-                  status: '400',
-                  statusDescription: 'Bad Request',
+                  status: '200',
+                  statusDescription: 'OK',
                   headers: {
-                    'content-type': [{ key: 'Content-Type', value: 'application/json' }],
-                    'access-control-allow-origin': [{ key: 'Access-Control-Allow-Origin', value: '*' }],
+                      'content-type': [{ key: 'Content-Type', value: 'application/json' }],
                   },
-                  body: JSON.stringify({
-                    error: 'Invalid path format. Expected: /v1/yyyy-mm-dd or /v1/yyyy-mm-dd/timezone',
-                  }),
-                };
-              }
-
-              const targetDateStr = pathMatch[1];
-              const timezoneSegment = pathMatch[2];
-              const timezone = timezoneSegment || 'UTC';
-
-              if (!isValidTimezone(timezone)) {
-                return {
-                  status: '400',
-                  statusDescription: 'Bad Request',
-                  headers: {
-                    'content-type': [{ key: 'Content-Type', value: 'application/json' }],
-                    'access-control-allow-origin': [{ key: 'Access-Control-Allow-Origin', value: '*' }],
-                  },
-                  body: JSON.stringify({
-                    error: 'Invalid timezone. Use a valid IANA timezone (e.g. Pacific/Auckland)',
-                  }),
-                };
-              }
-              
-              // Parse and validate target date strictly
-              const targetDate = parseDateString(targetDateStr);
-              
-              // Validate date
-              if (!targetDate) {
-                return {
-                  status: '400',
-                  statusDescription: 'Bad Request',
-                  headers: {
-                    'content-type': [{ key: 'Content-Type', value: 'application/json' }],
-                    'access-control-allow-origin': [{ key: 'Access-Control-Allow-Origin', value: '*' }],
-                  },
-                  body: JSON.stringify({
-                    error: 'Invalid date format. Use yyyy-mm-dd',
-                  }),
-                };
-              }
-
-              // Calculate days until target date based on selected timezone's current date
-              const today = getTodayInTimezone(timezone);
-              const diffDays = toEpochDay(targetDate) - toEpochDay(today);
-
-              // Get query parameters (support both 'color' and 'colour' spellings)
-              const label = params.get('label') || 'Days Remaining';
-              const color = params.get('color') || params.get('colour') || 'blue';
-
-              // Build badge-style response
-              const response = {
-                schemaVersion: 1,
-                label: label,
-                message: `${diffDays} days`,
-                color: color,
+                  body: JSON.stringify({ message: 'Deployment In Progress' }),
               };
-
-              return {
-                status: '200',
-                statusDescription: 'OK',
-                headers: {
-                  'content-type': [{ key: 'Content-Type', value: 'application/json' }],
-                  'access-control-allow-origin': [{ key: 'Access-Control-Allow-Origin', value: '*' }],
-                  'cache-control': [{ key: 'Cache-Control', value: 'public, max-age=3600' }],
-                },
-                body: JSON.stringify(response),
-              };
-
-            } catch (error) {
-              console.error('Error processing request:', error);
-              
-              return {
-                status: '500',
-                statusDescription: 'Internal Server Error',
-                headers: {
-                  'content-type': [{ key: 'Content-Type', value: 'application/json' }],
-                  'access-control-allow-origin': [{ key: 'Access-Control-Allow-Origin', value: '*' }],
-                },
-                body: JSON.stringify({
-                  error: 'Internal server error',
-                }),
-              };
-            }
           };
       Timeout: 5  # Lambda@Edge limit for origin-request
       MemorySize: 128
@@ -299,6 +130,51 @@ Resources:
           CookiesConfig:
             CookieBehavior: none
 
+  # S3 bucket for Swagger documentation static files
+  DocsBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      Tags:
+        - Key: Project
+          Value: DaysUntil
+
+  # CloudFront Origin Access Control for S3 docs bucket
+  DocsOriginAccessControl:
+    Type: 'AWS::CloudFront::OriginAccessControl'
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub '${AWS::StackName}-docs-oac'
+        Description: Access control for docs S3 origin
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  # Allow CloudFront distribution to read docs bucket objects
+  DocsBucketPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket: !Ref DocsBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCloudFrontRead
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: 's3:GetObject'
+            Resource: !Sub '${DocsBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}'
+
   # CloudFront Distribution (with Lambda@Edge)
   CloudFrontDistribution:
     Type: 'AWS::CloudFront::Distribution'
@@ -308,6 +184,7 @@ Resources:
         Comment: 'CloudFront distribution for Days Until API with Lambda@Edge'
         HttpVersion: http2and3
         PriceClass: PriceClass_100  # Use only North America and Europe edges (cheapest)
+        DefaultRootObject: docs/index.html
         Aliases:
           !If
             - CreateDNSRecord
@@ -321,13 +198,17 @@ Resources:
               MinimumProtocolVersion: TLSv1.2_2021
             - CloudFrontDefaultCertificate: true
         Origins:
-          - Id: DummyOrigin
+          - Id: DocsS3Origin
+            DomainName: !GetAtt DocsBucket.RegionalDomainName
+            S3OriginConfig: {}
+            OriginAccessControlId: !GetAtt DocsOriginAccessControl.Id
+          - Id: ApiFallbackOrigin
             DomainName: example.com  # Dummy origin (Lambda@Edge generates response)
             CustomOriginConfig:
               HTTPSPort: 443
               OriginProtocolPolicy: https-only
         DefaultCacheBehavior:
-          TargetOriginId: DummyOrigin
+          TargetOriginId: DocsS3Origin
           ViewerProtocolPolicy: redirect-to-https
           AllowedMethods:
             - GET
@@ -337,11 +218,25 @@ Resources:
             - GET
             - HEAD
             - OPTIONS
-          CachePolicyId: !Ref ApiCachePolicy
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # Managed-CachingOptimized
           Compress: true
-          LambdaFunctionAssociations:
-            - EventType: origin-request
-              LambdaFunctionARN: !Ref DaysUntilFunctionVersion  # Must use versioned ARN
+        OrderedCacheBehaviors:
+          - PathPattern: '/v1/*'
+            TargetOriginId: ApiFallbackOrigin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods:
+              - GET
+              - HEAD
+              - OPTIONS
+            CachedMethods:
+              - GET
+              - HEAD
+              - OPTIONS
+            CachePolicyId: !Ref ApiCachePolicy
+            Compress: true
+            LambdaFunctionAssociations:
+              - EventType: origin-request
+                LambdaFunctionARN: !Ref DaysUntilFunctionVersion  # Must use versioned ARN
       Tags:
         - Key: Project
           Value: DaysUntil
@@ -392,3 +287,9 @@ Outputs:
   CloudFrontDistributionId:
     Description: 'CloudFront distribution ID'
     Value: !Ref CloudFrontDistribution
+
+  DocsBucketName:
+    Description: 'S3 bucket name for Swagger docs static files'
+    Value: !Ref DocsBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-DocsBucketName'

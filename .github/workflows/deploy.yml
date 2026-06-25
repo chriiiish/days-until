@@ -8,7 +8,7 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  STACK_NAME: days-until-api
+  STACK_NAME: days-until
 
 jobs:
   deploy:
@@ -30,11 +30,9 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-          # Alternative: use access keys (less secure)
-          # aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          # aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_DEPLOYER_ROLE_NAME }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
       - name: Package Lambda function
         run: |
@@ -42,29 +40,51 @@ jobs:
           zip -r ../lambda.zip .
           cd ..
 
-      - name: Upload Lambda code to S3
-        id: upload
-        run: |
-          BUCKET_NAME="${{ secrets.DEPLOYMENT_BUCKET }}"
-          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-          S3_KEY="lambda-deployments/days-until-api-${TIMESTAMP}.zip"
-          
-          aws s3 cp lambda.zip "s3://${BUCKET_NAME}/${S3_KEY}"
-          
-          echo "s3_bucket=${BUCKET_NAME}" >> $GITHUB_OUTPUT
-          echo "s3_key=${S3_KEY}" >> $GITHUB_OUTPUT
-
       - name: Deploy CloudFormation stack
         run: |
           aws cloudformation deploy \
             --template-file infrastructure/template.yaml \
             --stack-name ${{ env.STACK_NAME }} \
             --parameter-overrides \
-              DomainName=${{ secrets.DOMAIN_NAME }} \
-              CertificateArn=${{ secrets.CERTIFICATE_ARN }} \
               HostedZoneId=${{ secrets.HOSTED_ZONE_ID }} \
             --capabilities CAPABILITY_IAM \
             --no-fail-on-empty-changeset
+
+      - name: Upload Swagger docs to S3 origin bucket
+        run: |
+          DOCS_BUCKET=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.STACK_NAME }} \
+            --query "Stacks[0].Outputs[?OutputKey=='DocsBucketName'].OutputValue" \
+            --output text)
+
+          aws s3 cp docs/index.html "s3://${DOCS_BUCKET}/index.html" --content-type "text/html; charset=utf-8"
+          aws s3 cp docs/openapi.yaml "s3://${DOCS_BUCKET}/openapi.yaml" --content-type "application/yaml"
+
+      - name: Invalidate CloudFront docs cache
+        run: |
+          DISTRIBUTION_ID=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.STACK_NAME }} \
+            --query "Stacks[0].Outputs[?OutputKey=='CloudFrontDistributionId'].OutputValue" \
+            --output text)
+
+          aws cloudfront create-invalidation \
+            --distribution-id "${DISTRIBUTION_ID}" \
+            --paths "/" "/index.html" "/openapi.yaml"
+
+      - name: Upload Lambda code to S3
+        id: upload
+        run: |
+          DOCS_BUCKET=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.STACK_NAME }} \
+            --query "Stacks[0].Outputs[?OutputKey=='DocsBucketName'].OutputValue" \
+            --output text)
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          S3_KEY="lambda-deployments/days-until-api-${TIMESTAMP}.zip"
+          
+          aws s3 cp lambda.zip "s3://${DOCS_BUCKET}/${S3_KEY}"
+          
+          echo "s3_bucket=${DOCS_BUCKET}" >> $GITHUB_OUTPUT
+          echo "s3_key=${S3_KEY}" >> $GITHUB_OUTPUT
 
       - name: Update Lambda function code
         run: |
@@ -83,7 +103,7 @@ jobs:
         run: |
           API_URL=$(aws cloudformation describe-stacks \
             --stack-name ${{ env.STACK_NAME }} \
-            --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" \
+            --query "Stacks[0].Outputs[?OutputKey=='CloudFrontUrl'].OutputValue" \
             --output text)
           
           echo "api_url=${API_URL}" >> $GITHUB_OUTPUT
@@ -98,23 +118,9 @@ jobs:
           echo "Test response: ${RESPONSE}"
           
           # Verify response contains "days" field
-          if echo "${RESPONSE}" | grep -q '"days"'; then
+          if echo "${RESPONSE}" | grep -q '"message"'; then
             echo "✅ API test passed"
           else
             echo "❌ API test failed"
             exit 1
           fi
-
-      - name: Deployment summary
-        run: |
-          echo "## Deployment Summary 🎉" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **API URL**: ${{ steps.get_url.outputs.api_url }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Custom Domain**: https://${{ secrets.DOMAIN_NAME }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Stack Name**: ${{ env.STACK_NAME }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Region**: ${{ env.AWS_REGION }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Example Usage" >> $GITHUB_STEP_SUMMARY
-          echo '```bash' >> $GITHUB_STEP_SUMMARY
-          echo "curl ${{ steps.get_url.outputs.api_url }}/v1/2027-01-01" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY

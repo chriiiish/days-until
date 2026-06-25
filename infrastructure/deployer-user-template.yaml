@@ -1,0 +1,214 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  IAM user for deploying the Days Until CloudFormation stack
+
+Parameters:
+  DeploymentUserName:
+    Type: String
+    Default: days-until-deployer
+    Description: IAM user name for deployments
+    AllowedPattern: '[a-zA-Z0-9+=,.@_-]{1,64}'
+
+  TargetStackName:
+    Type: String
+    Default: days-until
+    Description: Name of the CloudFormation stack this user can deploy
+    AllowedPattern: '[a-zA-Z][-a-zA-Z0-9]*'
+
+Resources:
+  DaysUntilCfnExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${TargetStackName}-cfn-execution-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub '${TargetStackName}-cfn-execution-policy'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # Lambda@Edge function, versions, permissions
+              - Sid: LambdaManagement
+                Effect: Allow
+                Action:
+                  - lambda:CreateFunction
+                  - lambda:DeleteFunction
+                  - lambda:GetFunction
+                  - lambda:GetFunctionConfiguration
+                  - lambda:UpdateFunctionCode
+                  - lambda:UpdateFunctionConfiguration
+                  - lambda:PublishVersion
+                  - lambda:DeleteFunctionConcurrency
+                  - lambda:AddPermission
+                  - lambda:RemovePermission
+                  - lambda:TagResource
+                  - lambda:UntagResource
+                Resource:
+                  - !Sub 'arn:aws:lambda:us-east-1:${AWS::AccountId}:function:days-until-edge*'
+
+              # IAM role used by Lambda@Edge function created in target stack
+              - Sid: IamRoleManagementForLambda
+                Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:TagRole
+                  - iam:UntagRole
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:PutRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:PassRole
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    iam:PassedToService:
+                      - lambda.amazonaws.com
+                      - edgelambda.amazonaws.com
+
+              # CloudWatch Logs for Lambda function log group in stack
+              - Sid: LogGroupManagement
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:DeleteLogGroup
+                  - logs:PutRetentionPolicy
+                  - logs:DeleteRetentionPolicy
+                  - logs:TagResource
+                  - logs:UntagResource
+                Resource:
+                  - !Sub 'arn:aws:logs:us-east-1:${AWS::AccountId}:log-group:/aws/lambda/*'
+
+              # CloudFront resources used by stack (global service)
+              - Sid: CloudFrontManagement
+                Effect: Allow
+                Action:
+                  - cloudfront:CreateDistribution
+                  - cloudfront:GetDistribution
+                  - cloudfront:GetDistributionConfig
+                  - cloudfront:UpdateDistribution
+                  - cloudfront:DeleteDistribution
+                  - cloudfront:TagResource
+                  - cloudfront:UntagResource
+                  - cloudfront:CreateCachePolicy
+                  - cloudfront:GetCachePolicy
+                  - cloudfront:DeleteCachePolicy
+                  - cloudfront:ListCachePolicies
+                  - cloudfront:CreateOriginAccessControl
+                  - cloudfront:GetOriginAccessControl
+                  - cloudfront:UpdateOriginAccessControl
+                  - cloudfront:DeleteOriginAccessControl
+                  - cloudfront:ListOriginAccessControls
+                Resource: '*'
+
+              # ACM certificate in us-east-1 for CloudFront
+              - Sid: AcmCertificateManagement
+                Effect: Allow
+                Action:
+                  - acm:RequestCertificate
+                  - acm:DescribeCertificate
+                  - acm:DeleteCertificate
+                  - acm:AddTagsToCertificate
+                  - acm:RemoveTagsFromCertificate
+                  - acm:ListTagsForCertificate
+                Resource: '*'
+
+              # Route53 records for custom domain alias
+              - Sid: Route53RecordManagement
+                Effect: Allow
+                Action:
+                  - route53:ChangeResourceRecordSets
+                  - route53:GetChange
+                Resource: '*'
+
+              # S3 bucket for docs origin + bucket policy/controls
+              - Sid: S3BucketManagement
+                Effect: Allow
+                Action:
+                  - s3:CreateBucket
+                  - s3:DeleteBucket
+                  - s3:PutBucketPolicy
+                  - s3:DeleteBucketPolicy
+                  - s3:GetBucketPolicy
+                  - s3:PutBucketPublicAccessBlock
+                  - s3:GetBucketPublicAccessBlock
+                  - s3:PutBucketOwnershipControls
+                  - s3:GetBucketOwnershipControls
+                  - s3:PutBucketTagging
+                  - s3:GetBucketTagging
+                  - s3:DeleteBucketTagging
+                  - s3:GetBucketLocation
+                  - s3:ListBucket
+                Resource: '*'
+
+  DaysUntilDeployerUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: !Ref DeploymentUserName
+
+  DaysUntilDeployerUserPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub '${TargetStackName}-deployer-user-policy'
+      Users:
+        - !Ref DaysUntilDeployerUser
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          # Minimum CloudFormation permissions to deploy one stack via change sets
+          - Sid: CloudFormationDeploySingleStack
+            Effect: Allow
+            Action:
+              - cloudformation:CreateStack
+              - cloudformation:UpdateStack
+              - cloudformation:DeleteStack
+              - cloudformation:DescribeStacks
+              - cloudformation:DescribeStackEvents
+              - cloudformation:DescribeStackResources
+              - cloudformation:GetTemplate
+              - cloudformation:GetTemplateSummary
+              - cloudformation:ValidateTemplate
+              - cloudformation:ListStackResources
+              - cloudformation:CreateChangeSet
+              - cloudformation:DescribeChangeSet
+              - cloudformation:ExecuteChangeSet
+              - cloudformation:DeleteChangeSet
+            Resource:
+              - !Sub 'arn:aws:cloudformation:us-east-1:${AWS::AccountId}:stack/${TargetStackName}/*'
+              - !Sub 'arn:aws:cloudformation:us-east-1:${AWS::AccountId}:changeSet/*/*'
+
+          # Allow passing only the CloudFormation execution role above
+          - Sid: PassOnlyCfnExecutionRole
+            Effect: Allow
+            Action:
+              - iam:PassRole
+            Resource: !GetAtt DaysUntilCfnExecutionRole.Arn
+            Condition:
+              StringEquals:
+                iam:PassedToService: cloudformation.amazonaws.com
+
+          # Useful for deployment scripts
+          - Sid: ReadCallerIdentity
+            Effect: Allow
+            Action:
+              - sts:GetCallerIdentity
+            Resource: '*'
+
+Outputs:
+  DeploymentUserName:
+    Description: IAM user with permission to deploy the target stack
+    Value: !Ref DaysUntilDeployerUser
+
+  DeploymentUserArn:
+    Description: ARN of the deployment IAM user
+    Value: !GetAtt DaysUntilDeployerUser.Arn
+
+  CloudFormationExecutionRoleArn:
+    Description: Role ARN to pass to 'aws cloudformation deploy --role-arn'
+    Value: !GetAtt DaysUntilCfnExecutionRole.Arn
